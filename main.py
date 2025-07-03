@@ -29,16 +29,21 @@ dp = Dispatcher(storage=MemoryStorage())
 class UserStates(StatesGroup):
     waiting_api_key = State()
     waiting_diagram_request = State()
+    selecting_model = State()
 
 
 # Хранилище API ключей пользователей (в реальном приложении лучше использовать базу данных)
 user_api_keys = {}
+
+# Хранилище выбранных моделей пользователей
+user_models = {}
 
 
 def get_main_keyboard():
     """Возвращает основную клавиатуру бота"""
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔑 Установить API ключ", callback_data="set_api_key")],
+        [InlineKeyboardButton(text="🤖 Выбрать модель", callback_data="select_model")],
         [InlineKeyboardButton(text="📊 Создать диаграмму", callback_data="create_diagram")],
         [InlineKeyboardButton(text="ℹ️ Помощь", callback_data="help")]
     ])
