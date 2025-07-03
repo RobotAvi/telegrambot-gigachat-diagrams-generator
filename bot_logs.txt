@@ -1,0 +1,7 @@
+Python-dotenv could not parse statement starting at line 1
+2025-07-03 19:31:24,700 - __main__ - INFO - Запуск бота...
+2025-07-03 19:31:24,700 - aiogram.dispatcher - INFO - Start polling
+2025-07-03 19:31:24,962 - aiogram.dispatcher - INFO - Run polling for bot @GptExperiment001_bot id=7705582145 - 'GptExperiment001'
+2025-07-03 19:31:50,535 - aiogram.event - INFO - Update id=669656186 is handled. Duration 302 ms by bot id=7705582145
+2025-07-03 19:31:54,544 - aiogram.event - INFO - Update id=669656187 is handled. Duration 211 ms by bot id=7705582145
+2025-07-03 19:31:56,633 - aiogram.event - INFO - Update id=669656188 is handled. Duration 107 ms by bot id=7705582145
