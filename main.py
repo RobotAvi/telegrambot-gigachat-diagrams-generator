@@ -50,6 +50,64 @@ def get_main_keyboard():
     return keyboard
 
 
+def format_error_details(error_details: dict, show_sensitive=False) -> str:
+    """Форматирует детали ошибки для показа пользователю"""
+    if not error_details:
+        return "Детали ошибки недоступны"
+    
+    result = []
+    
+    # Основная информация
+    result.append(f"🔍 **Диагностика запроса**\n")
+    result.append(f"**Операция:** {error_details.get('operation', 'неизвестно')}")
+    result.append(f"**URL:** `{error_details.get('url', 'неизвестно')}`")
+    result.append(f"**Метод:** {error_details.get('method', 'неизвестно')}")
+    
+    # Заголовки
+    if 'headers' in error_details:
+        result.append(f"\n**Заголовки запроса:**")
+        for key, value in error_details['headers'].items():
+            result.append(f"• `{key}: {value}`")
+    
+    # Данные запроса
+    if 'data' in error_details:
+        result.append(f"\n**Данные запроса:**")
+        for key, value in error_details['data'].items():
+            result.append(f"• `{key}: {value}`")
+    
+    # Информация о ответе
+    if 'response_status' in error_details:
+        result.append(f"\n**Ответ сервера:**")
+        result.append(f"**Статус:** {error_details['response_status']}")
+        
+        if 'response_headers' in error_details:
+            result.append(f"**Заголовки ответа:**")
+            for key, value in list(error_details['response_headers'].items())[:5]:  # Показываем только первые 5
+                result.append(f"• `{key}: {value}`")
+        
+        if 'response_text' in error_details:
+            response_text = error_details['response_text']
+            if len(response_text) > 500:
+                response_text = response_text[:500] + "..."
+            result.append(f"**Текст ответа:**\n```\n{response_text}\n```")
+    
+    # Curl команда
+    if 'curl_command' in error_details:
+        result.append(f"\n**Эквивалентная curl команда:**\n```bash\n{error_details['curl_command']}\n```")
+    
+    # Ошибка
+    if 'error' in error_details:
+        result.append(f"\n❌ **Ошибка:** {error_details['error']}")
+    
+    # Успех
+    if error_details.get('success'):
+        result.append(f"\n✅ **Запрос выполнен успешно**")
+        if 'token_expires_in' in error_details:
+            result.append(f"• Токен действует: {error_details['token_expires_in']} секунд")
+    
+    return "\n".join(result)
+
+
 @dp.message(Command("start"))
 async def start_command(message: types.Message):
     """Обработчик команды /start"""
@@ -121,6 +179,139 @@ async def create_diagram_callback(callback: types.CallbackQuery, state: FSMConte
     await state.set_state(UserStates.waiting_diagram_request)
 
 
+@dp.callback_query(F.data == "select_model")
+async def select_model_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Обработчик выбора модели"""
+    user_id = callback.from_user.id
+    
+    if user_id not in user_api_keys:
+        await callback.message.edit_text(
+            "❌ **API ключ не установлен**\n\n"
+            "Для выбора модели необходимо установить API ключ Гигачата.\n"
+            "Нажмите кнопку ниже для установки ключа.",
+            reply_markup=get_main_keyboard(),
+            parse_mode="Markdown"
+        )
+        return
+    
+    # Устанавливаем API ключ для текущего запроса
+    gigachat_client.set_credentials(user_api_keys[user_id])
+    
+    status_message = await callback.message.edit_text("🔄 Получаю список доступных моделей...")
+    
+    try:
+        models = await gigachat_client.get_available_models()
+        current_model = gigachat_client.get_current_model()
+        
+        if models:
+            model_buttons = []
+            for model in models:
+                model_id = model["id"]
+                model_desc = model["description"]
+                
+                # Добавляем галочку для текущей модели
+                button_text = f"✅ {model_desc}" if model_id == current_model else model_desc
+                model_buttons.append([InlineKeyboardButton(
+                    text=button_text, 
+                    callback_data=f"model_{model_id}"
+                )])
+            
+            # Добавляем кнопку возврата
+            model_buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_main")])
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=model_buttons)
+            
+            await status_message.edit_text(
+                f"🤖 **Выбор модели**\n\n"
+                f"**Текущая модель:** {current_model}\n\n"
+                f"Выберите модель для генерации диаграмм:",
+                reply_markup=keyboard,
+                parse_mode="Markdown"
+            )
+        else:
+            await status_message.edit_text(
+                "❌ **Не удалось получить список моделей**\n\n"
+                "Используется модель по умолчанию: GigaChat-Pro",
+                reply_markup=get_main_keyboard(),
+                parse_mode="Markdown"
+            )
+            
+    except Exception as e:
+        logger.error(f"Ошибка получения моделей: {e}")
+        
+        # Получаем детали ошибки для диагностики
+        error_details = gigachat_client.get_last_error_details()
+        
+        error_text = "❌ **Ошибка получения моделей**\n\n"
+        error_text += f"**Ошибка:** {str(e)}\n\n"
+        
+        if error_details and not error_details.get('success', False):
+            error_text += "**📋 Детали запроса к API:**\n"
+            error_text += format_error_details(error_details)
+        
+        # Если сообщение слишком длинное, разбиваем на части
+        if len(error_text) > 4000:
+            await status_message.edit_text(
+                "❌ **Ошибка получения моделей**\n\n"
+                f"**Ошибка:** {str(e)}\n\n"
+                "Отправляю подробную диагностику...",
+                parse_mode="Markdown"
+            )
+            
+            if error_details and not error_details.get('success', False):
+                await callback.message.answer(
+                    "**📋 Детали запроса к API:**\n" + format_error_details(error_details),
+                    parse_mode="Markdown"
+                )
+            
+            await callback.message.answer(
+                "Используется модель по умолчанию: GigaChat-Pro",
+                reply_markup=get_main_keyboard()
+            )
+        else:
+            await status_message.edit_text(
+                error_text + "\n\nИспользуется модель по умолчанию: GigaChat-Pro",
+                reply_markup=get_main_keyboard(),
+                parse_mode="Markdown"
+            )
+
+
+@dp.callback_query(F.data.startswith("model_"))
+async def model_selected_callback(callback: types.CallbackQuery):
+    """Обработчик выбора конкретной модели"""
+    model_id = callback.data.replace("model_", "")
+    user_id = callback.from_user.id
+    
+    if user_id in user_api_keys:
+        gigachat_client.set_credentials(user_api_keys[user_id])
+        gigachat_client.set_model(model_id)
+        user_models[user_id] = model_id
+        
+        await callback.message.edit_text(
+            f"✅ **Модель выбрана!**\n\n"
+            f"**Активная модель:** {model_id}\n\n"
+            f"Теперь диаграммы будут создаваться с использованием этой модели.",
+            reply_markup=get_main_keyboard(),
+            parse_mode="Markdown"
+        )
+    else:
+        await callback.message.edit_text(
+            "❌ API ключ не найден. Установите ключ заново.",
+            reply_markup=get_main_keyboard()
+        )
+
+
+@dp.callback_query(F.data == "back_to_main")
+async def back_to_main_callback(callback: types.CallbackQuery):
+    """Обработчик возврата в главное меню"""
+    await callback.message.edit_text(
+        "🏠 **Главное меню**\n\n"
+        "Выберите действие:",
+        reply_markup=get_main_keyboard(),
+        parse_mode="Markdown"
+    )
+
+
 @dp.callback_query(F.data == "help")
 async def help_callback(callback: types.CallbackQuery):
     """Обработчик помощи"""
@@ -177,7 +368,7 @@ async def process_api_key(message: types.Message, state: FSMContext):
     
     try:
         gigachat_client.set_credentials(api_key)
-        is_valid = await gigachat_client.check_credentials()
+        is_valid, error_message = await gigachat_client.check_credentials()
         
         if is_valid:
             user_api_keys[user_id] = api_key
@@ -189,20 +380,90 @@ async def process_api_key(message: types.Message, state: FSMContext):
                 parse_mode="Markdown"
             )
         else:
+            # Получаем детали ошибки
+            error_details = gigachat_client.get_last_error_details()
+            
+            error_text = "❌ **Неверный API ключ**\n\n"
+            
+            if error_message:
+                error_text += f"**Ошибка:** {error_message}\n\n"
+            
+            if error_details:
+                error_text += format_error_details(error_details)
+                error_text += "\n\n**💡 Рекомендации:**\n"
+                error_text += "• Проверьте правильность API ключа\n"
+                error_text += "• Убедитесь, что ключ активен\n"
+                error_text += "• Проверьте права доступа к API\n"
+                error_text += "• Сравните с запросом в Postman"
+            else:
+                error_text += "Проверьте правильность ключа и попробуйте снова."
+            
+            # Если сообщение слишком длинное, разбиваем на части
+            if len(error_text) > 4000:
+                await status_message.edit_text(
+                    "❌ **Неверный API ключ**\n\n"
+                    f"**Ошибка:** {error_message}\n\n"
+                    "Отправляю подробную диагностику...",
+                    parse_mode="Markdown"
+                )
+                
+                await message.answer(
+                    format_error_details(error_details),
+                    parse_mode="Markdown"
+                )
+                
+                await message.answer(
+                    "**💡 Рекомендации:**\n"
+                    "• Проверьте правильность API ключа\n"
+                    "• Убедитесь, что ключ активен\n"
+                    "• Проверьте права доступа к API\n"
+                    "• Сравните с запросом в Postman",
+                    reply_markup=get_main_keyboard(),
+                    parse_mode="Markdown"
+                )
+            else:
+                await status_message.edit_text(
+                    error_text,
+                    reply_markup=get_main_keyboard(),
+                    parse_mode="Markdown"
+                )
+    except Exception as e:
+        logger.error(f"Ошибка проверки API ключа: {e}")
+        
+        # Получаем детали ошибки для диагностики
+        error_details = gigachat_client.get_last_error_details()
+        
+        error_text = "❌ **Ошибка проверки API ключа**\n\n"
+        error_text += f"**Ошибка:** {str(e)}\n\n"
+        
+        if error_details:
+            error_text += format_error_details(error_details)
+        
+        # Если сообщение слишком длинное, разбиваем на части
+        if len(error_text) > 4000:
             await status_message.edit_text(
-                "❌ **Неверный API ключ**\n\n"
-                "Проверьте правильность ключа и попробуйте снова.",
+                "❌ **Ошибка проверки API ключа**\n\n"
+                f"**Ошибка:** {str(e)}\n\n"
+                "Отправляю подробную диагностику...",
+                parse_mode="Markdown"
+            )
+            
+            if error_details:
+                await message.answer(
+                    format_error_details(error_details),
+                    parse_mode="Markdown"
+                )
+            
+            await message.answer(
+                "Попробуйте позже или обратитесь к администратору.",
+                reply_markup=get_main_keyboard()
+            )
+        else:
+            await status_message.edit_text(
+                error_text,
                 reply_markup=get_main_keyboard(),
                 parse_mode="Markdown"
             )
-    except Exception as e:
-        logger.error(f"Ошибка проверки API ключа: {e}")
-        await status_message.edit_text(
-            "❌ **Ошибка проверки API ключа**\n\n"
-            "Произошла ошибка при проверке ключа. Попробуйте позже.",
-            reply_markup=get_main_keyboard(),
-            parse_mode="Markdown"
-        )
     
     await state.clear()
 
@@ -271,13 +532,52 @@ async def process_diagram_request(message: types.Message, state: FSMContext):
             
     except Exception as e:
         logger.error(f"Ошибка создания диаграммы: {e}")
-        await status_message.edit_text(
-            f"❌ **Ошибка создания диаграммы**\n\n"
-            f"Произошла ошибка: {str(e)}\n\n"
-            f"Попробуйте изменить запрос или попробовать позже.",
-            reply_markup=get_main_keyboard(),
-            parse_mode="Markdown"
-        )
+        
+        # Получаем детали ошибки для диагностики
+        error_details = gigachat_client.get_last_error_details()
+        
+        error_text = f"❌ **Ошибка создания диаграммы**\n\n"
+        error_text += f"**Ошибка:** {str(e)}\n\n"
+        
+        if error_details:
+            if not error_details.get('success', False):
+                error_text += "**📋 Детали запроса к API:**\n"
+                error_text += format_error_details(error_details)
+        
+        error_text += "\n**💡 Попробуйте:**\n"
+        error_text += "• Изменить формулировку запроса\n"
+        error_text += "• Использовать более простое описание\n"
+        error_text += "• Повторить попытку позже"
+        
+        # Если сообщение слишком длинное, разбиваем на части
+        if len(error_text) > 4000:
+            await status_message.edit_text(
+                f"❌ **Ошибка создания диаграммы**\n\n"
+                f"**Ошибка:** {str(e)}\n\n"
+                "Отправляю подробную диагностику...",
+                parse_mode="Markdown"
+            )
+            
+            if error_details and not error_details.get('success', False):
+                await message.answer(
+                    "**📋 Детали запроса к API:**\n" + format_error_details(error_details),
+                    parse_mode="Markdown"
+                )
+            
+            await message.answer(
+                "**💡 Попробуйте:**\n"
+                "• Изменить формулировку запроса\n"
+                "• Использовать более простое описание\n"
+                "• Повторить попытку позже",
+                reply_markup=get_main_keyboard(),
+                parse_mode="Markdown"
+            )
+        else:
+            await status_message.edit_text(
+                error_text,
+                reply_markup=get_main_keyboard(),
+                parse_mode="Markdown"
+            )
     
     await state.clear()
 
