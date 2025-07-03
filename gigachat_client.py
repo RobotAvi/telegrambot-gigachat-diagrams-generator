@@ -134,12 +134,21 @@ class GigaChatClient:
                         
                     result = json.loads(response_text)
                     self.access_token = result['access_token']
-                    # Токен действует 30 минут, обновляем за 5 минут до истечения
-                    self.token_expires_at = time.time() + result['expires_in'] - 300
+                    
+                    # Gigachat возвращает expires_at в миллисекундах, а не expires_in в секундах
+                    if 'expires_at' in result:
+                        # expires_at в миллисекундах, переводим в секунды
+                        expires_at_ms = result['expires_at']
+                        self.token_expires_at = expires_at_ms / 1000 - 300  # обновляем за 5 минут до истечения
+                        expires_in = max(0, int((expires_at_ms / 1000) - time.time()))
+                    else:
+                        # Фолбэк: токен действует 30 минут
+                        self.token_expires_at = time.time() + 1800 - 300
+                        expires_in = 1500
                     
                     # Успешная операция
                     self.last_error_details['success'] = True
-                    self.last_error_details['token_expires_in'] = result['expires_in']
+                    self.last_error_details['token_expires_in'] = expires_in
                     
                     return self.access_token
         except aiohttp.ClientError as e:
