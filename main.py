@@ -596,14 +596,25 @@ async def process_diagram_request(message: types.Message, state: FSMContext):
         # Генерируем код диаграммы
         diagram_code = await gigachat_client.generate_diagram_code(request_text)
         
-        await status_message.edit_text("🔨 Создаю диаграмму...")
+        # Показываем сгенерированный код пользователю
+        code_text = f"📝 **Сгенерированный код диаграммы:**\n\n```python\n{diagram_code}\n```"
+        
+        # Если код слишком длинный, обрезаем для показа
+        if len(code_text) > 4000:
+            truncated_code = diagram_code[:3000] + "\n... (код обрезан)"
+            code_text = f"📝 **Сгенерированный код диаграммы:**\n\n```python\n{truncated_code}\n```"
+        
+        await status_message.edit_text(code_text, parse_mode="Markdown")
+        
+        # Отправляем статус выполнения
+        execution_message = await message.answer("🔨 **Пытаюсь выполнить код и создать диаграмму...**", parse_mode="Markdown")
         
         # Генерируем диаграмму
         diagram_path = await diagram_generator.generate_diagram(diagram_code, user_id)
         
         # Отправляем диаграмму пользователю
         if diagram_path and os.path.exists(diagram_path):
-            await status_message.edit_text("📤 Отправляю диаграмму...")
+            await execution_message.edit_text("📤 **Отправляю диаграмму...**", parse_mode="Markdown")
             
             diagram_file = FSInputFile(diagram_path)
             await message.answer_photo(
@@ -618,7 +629,7 @@ async def process_diagram_request(message: types.Message, state: FSMContext):
             except:
                 pass
                 
-            await status_message.delete()
+            await execution_message.delete()
             
             # Предлагаем создать еще одну диаграмму
             await message.answer(
@@ -628,6 +639,13 @@ async def process_diagram_request(message: types.Message, state: FSMContext):
                 parse_mode="Markdown"
             )
         else:
+            # Удаляем сообщение о выполнении
+            if 'execution_message' in locals():
+                try:
+                    await execution_message.delete()
+                except:
+                    pass
+            
             await status_message.edit_text(
                 "❌ **Ошибка создания диаграммы**\n\n"
                 "Не удалось создать диаграмму. Попробуйте изменить запрос.",
