@@ -24,12 +24,10 @@ class DiagramGenerator:
             
         # Запрещенные импорты и функции
         forbidden_patterns = [
-            'import os',
             'import sys', 
             'import subprocess',
             'import shutil',
             'import glob',
-            'from os',
             'from sys',
             'from subprocess',
             'from shutil',
