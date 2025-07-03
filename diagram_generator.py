@@ -22,7 +22,7 @@ class DiagramGenerator:
         if len(code) > MAX_CODE_LENGTH:
             return False
             
-        # Запрещенные импорты и функции (кроме os для смены директории)
+        # Запрещенные импорты и функции
         forbidden_patterns = [
             'import sys', 
             'import subprocess',
@@ -74,9 +74,8 @@ class DiagramGenerator:
             # Записываем код в файл
             code_file = user_temp_dir / "diagram_code.py"
             
-            # Добавляем необходимые импорты, если их нет
-            if 'import os' not in code:
-                code = "import os\nos.chdir(r'" + str(user_temp_dir) + "')\n" + code
+            # Убираем смену директории - она уже установлена через cwd
+            # Код будет выполняться в правильной директории автоматически
             
             with open(code_file, 'w', encoding='utf-8') as f:
                 f.write(code)
