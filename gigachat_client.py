@@ -11,12 +11,21 @@ class GigaChatClient:
         self.access_token: Optional[str] = None
         self.token_expires_at: float = 0
         self.client_secret: Optional[str] = None
+        self.selected_model: str = "GigaChat-Pro"  # Модель по умолчанию
         
     def set_credentials(self, client_secret: str):
         """Устанавливает учетные данные для API"""
         self.client_secret = client_secret
         self.access_token = None
         self.token_expires_at = 0
+    
+    def set_model(self, model_id: str):
+        """Устанавливает модель для генерации"""
+        self.selected_model = model_id
+    
+    def get_current_model(self) -> str:
+        """Возвращает текущую выбранную модель"""
+        return self.selected_model
     
     async def _get_access_token(self) -> str:
         """Получает access token для API"""
@@ -63,6 +72,55 @@ class GigaChatClient:
         except Exception:
             return False
     
+    async def get_available_models(self) -> list:
+        """Получает список доступных моделей"""
+        if not self.client_secret:
+            raise ValueError("API ключ не установлен")
+            
+        access_token = await self._get_access_token()
+        
+        headers = {
+            'Accept': 'application/json',
+            'Authorization': f'Bearer {access_token}'
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"{GIGACHAT_BASE_URL}/models",
+                headers=headers,
+                ssl=False
+            ) as response:
+                if response.status != 200:
+                    # Если API не поддерживает /models, возвращаем известные модели
+                    return [
+                        {"id": "GigaChat", "description": "Базовая модель GigaChat"},
+                        {"id": "GigaChat-Pro", "description": "Продвинутая модель GigaChat-Pro"},
+                        {"id": "GigaChat-Max", "description": "Максимальная модель GigaChat-Max"}
+                    ]
+                    
+                result = await response.json()
+                
+                if 'data' in result:
+                    return [
+                        {
+                            "id": model.get("id", "Unknown"),
+                            "description": model.get("id", "Unknown") + (
+                                " (Pro версия)" if "Pro" in model.get("id", "") else
+                                " (Max версия)" if "Max" in model.get("id", "") else
+                                " (Базовая версия)"
+                            )
+                        }
+                        for model in result['data']
+                        if model.get("id", "").startswith("GigaChat")
+                    ]
+                else:
+                    # Фолбэк к известным моделям
+                    return [
+                        {"id": "GigaChat", "description": "Базовая модель GigaChat"},
+                        {"id": "GigaChat-Pro", "description": "Продвинутая модель GigaChat-Pro"},
+                        {"id": "GigaChat-Max", "description": "Максимальная модель GigaChat-Max"}
+                    ]
+    
     async def generate_diagram_code(self, user_request: str) -> str:
         """Генерирует код диаграммы на основе запроса пользователя"""
         if not self.client_secret:
@@ -77,7 +135,7 @@ class GigaChatClient:
         }
         
         payload = {
-            "model": "GigaChat",
+            "model": self.selected_model,
             "messages": [
                 {
                     "role": "system",
