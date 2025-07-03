@@ -1,4 +1,4 @@
-#!/bin/bash
+THIS SHOULD BE A LINTER ERROR#!/bin/bash
 
 echo "🚀 Установка Diagram Generator Telegram Bot"
 echo "==========================================="
