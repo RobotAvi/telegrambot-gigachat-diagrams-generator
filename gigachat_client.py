@@ -77,7 +77,7 @@ class GigaChatClient:
         }
         
         payload = {
-            "model": "GigaChat",
+            "model": "GigaChat-Pro",
             "messages": [
                 {
                     "role": "system",
