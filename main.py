@@ -345,11 +345,13 @@ async def fix_error_callback(callback: types.CallbackQuery, state: FSMContext):
         )
         
         # Показываем исправленный код пользователю
-        fixed_code_text = f"🔧 **Исправленный код диаграммы:**\n\n```python\n{fixed_code}\n```"
+        # Экранируем специальные символы для markdown
+        safe_fixed_code = fixed_code.replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace(']', '\\]').replace('`', '\\`').replace('(', '\\(').replace(')', '\\)')
+        fixed_code_text = f"🔧 **Исправленный код диаграммы:**\n\n```python\n{safe_fixed_code}\n```"
         
         # Если код слишком длинный, обрезаем для показа
         if len(fixed_code_text) > 4000:
-            truncated_code = fixed_code[:3000] + "\n... (код обрезан)"
+            truncated_code = safe_fixed_code[:3000] + "\n... (код обрезан)"
             fixed_code_text = f"🔧 **Исправленный код диаграммы:**\n\n```python\n{truncated_code}\n```"
         
         await status_message.edit_text(fixed_code_text, parse_mode="Markdown")
@@ -622,11 +624,13 @@ async def process_diagram_request(message: types.Message, state: FSMContext):
         diagram_code = await gigachat_client.generate_diagram_code(request_text)
         
         # Показываем сгенерированный код пользователю
-        code_text = f"📝 **Сгенерированный код диаграммы:**\n\n```python\n{diagram_code}\n```"
+        # Экранируем специальные символы для markdown
+        safe_code = diagram_code.replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace(']', '\\]').replace('`', '\\`').replace('(', '\\(').replace(')', '\\)')
+        code_text = f"📝 **Сгенерированный код диаграммы:**\n\n```python\n{safe_code}\n```"
         
         # Если код слишком длинный, обрезаем для показа
         if len(code_text) > 4000:
-            truncated_code = diagram_code[:3000] + "\n... (код обрезан)"
+            truncated_code = safe_code[:3000] + "\n... (код обрезан)"
             code_text = f"📝 **Сгенерированный код диаграммы:**\n\n```python\n{truncated_code}\n```"
         
         await status_message.edit_text(code_text, parse_mode="Markdown")

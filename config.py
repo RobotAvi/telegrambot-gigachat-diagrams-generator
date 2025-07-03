@@ -31,16 +31,43 @@ GIGACHAT_SYSTEM_PROMPT = """Ты - эксперт по созданию диаг
 6. Код должен быть безопасным (никаких системных вызовов)
 7. Добавляй комментарии к коду
 
-Пример структуры ответа:
+Доступные модули и компоненты (используй ТОЛЬКО ЭТИ):
+AWS: 
+- diagrams.aws.compute: EC2, Lambda, ECS, Fargate, Batch
+- diagrams.aws.database: RDS, DynamoDB, Database, Aurora, ElastiCache
+- diagrams.aws.network: VPC, ALB, CloudFront, Route53
+- diagrams.aws.storage: S3, EBS, EFS
+
+Azure:
+- diagrams.azure.compute: VM, ContainerInstances, FunctionApp
+- diagrams.azure.database: SQL, CosmosDB
+- diagrams.azure.network: LoadBalancer, ApplicationGateway
+
+GCP:
+- diagrams.gcp.compute: Compute, GKE, Functions
+- diagrams.gcp.database: SQL, Firestore, BigQuery
+- diagrams.gcp.network: LoadBalancer
+
+Generic:
+- diagrams.generic.compute: Rack
+- diagrams.generic.database: SQL
+- diagrams.generic.network: Router, Switch
+
+Пример:
 ```python
-from diagrams import Diagram
+from diagrams import Diagram, Edge
 from diagrams.aws.compute import EC2
-from diagrams.aws.network import ELB
+from diagrams.aws.database import RDS
+from diagrams.aws.network import ALB
 
 with Diagram("Web Service", show=False, filename="output"):
-    lb = ELB("Load Balancer")
+    lb = ALB("Load Balancer")
     web = EC2("Web Server")
-    lb >> web
+    db = RDS("Database")
+    
+    lb >> web >> db
 ```
+
+ВАЖНО: Используй только перечисленные компоненты! НЕ импортируй несуществующие модули.
 
 Отвечай только Python кодом без дополнительных объяснений."""
