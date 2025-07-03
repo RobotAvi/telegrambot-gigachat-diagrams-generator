@@ -1,4 +1,4 @@
-import os
+THIS SHOULD BE A LINTER ERRORimport os
 import sys
 import tempfile
 import subprocess
