@@ -1,4 +1,4 @@
-import asyncio
+THIS SHOULD BE A LINTER ERRORimport asyncio
 import logging
 import os
 from aiogram import Bot, Dispatcher, types, F
@@ -344,7 +344,18 @@ async def fix_error_callback(callback: types.CallbackQuery, state: FSMContext):
             error_context['user_request']
         )
         
-        await status_message.edit_text("🔨 Пытаюсь выполнить исправленный код...")
+        # Показываем исправленный код пользователю
+        fixed_code_text = f"🔧 **Исправленный код диаграммы:**\n\n```python\n{fixed_code}\n```"
+        
+        # Если код слишком длинный, обрезаем для показа
+        if len(fixed_code_text) > 4000:
+            truncated_code = fixed_code[:3000] + "\n... (код обрезан)"
+            fixed_code_text = f"🔧 **Исправленный код диаграммы:**\n\n```python\n{truncated_code}\n```"
+        
+        await status_message.edit_text(fixed_code_text, parse_mode="Markdown")
+        
+        # Отправляем статус выполнения исправленного кода
+        execution_message = await callback.message.answer("🔨 **Пытаюсь выполнить исправленный код...**", parse_mode="Markdown")
         
         # Пытаемся выполнить исправленный код
         diagram_path = await diagram_generator.generate_diagram(fixed_code, user_id)
