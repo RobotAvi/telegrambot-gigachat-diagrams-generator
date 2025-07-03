@@ -4,6 +4,7 @@ import json
 import time
 import base64
 import urllib.parse
+import uuid
 from typing import Optional, Dict, Any, Tuple
 from config import GIGACHAT_AUTH_URL, GIGACHAT_BASE_URL, GIGACHAT_SYSTEM_PROMPT
 
@@ -54,11 +55,9 @@ class GigaChatClient:
         if data:
             if isinstance(data, dict):
                 if method == 'POST' and 'Content-Type' in headers and 'form-urlencoded' in headers['Content-Type']:
-                    # Для form data
-                    form_data = []
+                    # Для form data - используем data-urlencode как в Postman
                     for key, value in data.items():
-                        form_data.append(f"{key}={urllib.parse.quote(str(value))}")
-                    curl_parts.append(f'--data "{" ".join(form_data)}"')
+                        curl_parts.append(f"--data-urlencode '{key}={value}'")
                 else:
                     # Для JSON data
                     curl_parts.append(f"--data '{json.dumps(data, ensure_ascii=False)}'")
