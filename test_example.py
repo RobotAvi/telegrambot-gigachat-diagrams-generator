@@ -46,18 +46,36 @@ async def test_diagram_generation():
         
         # Создаем диаграмму
         print("🔨 Создание диаграммы...")
-        diagram_path = await diagram_generator.generate_diagram(code, 12345)
-        
+        from diagram_generator import generate_diagram_with_retries
+        result = await generate_diagram_with_retries(code, 12345, gigachat_client, max_attempts=3)
+        if isinstance(result, str):
+            diagram_path = result
+        else:
+            diagram_path, last_code, last_error = result if isinstance(result, tuple) and len(result) == 3 else (None, None, None)
         if diagram_path and os.path.exists(diagram_path):
             print(f"✅ Диаграмма создана: {diagram_path}")
             print(f"Размер файла: {os.path.getsize(diagram_path)} байт")
             return True
+        elif last_code and last_error:
+            print("❌ Не удалось получить рабочий скрипт за 3 попытки.")
+            print(f"Последний вариант скрипта:\n{last_code}\n")
+            print(f"Ошибка:\n{last_error}\n")
+            return False
         else:
             print("❌ Диаграмма не создана")
             return False
             
     except Exception as e:
         print(f"❌ Ошибка: {e}")
+        # Выводим детали ошибки и curl, если есть
+        error_details = gigachat_client.get_last_error_details()
+        if error_details:
+            if 'curl_command' in error_details:
+                print("\nПример запроса в curl:")
+                print(error_details['curl_command'])
+            if 'response_text' in error_details:
+                print("\nОтвет сервера:")
+                print(error_details['response_text'])
         return False
 
 

@@ -10,7 +10,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, FSInputFil
 
 from config import BOT_TOKEN
 from gigachat_client import gigachat_client
-from diagram_generator import diagram_generator
+from diagram_generator import diagram_generator, generate_diagram_with_retries
 
 
 # Настройка логирования
@@ -490,35 +490,43 @@ async def process_diagram_request(message: types.Message, state: FSMContext):
     try:
         # Генерируем код диаграммы
         diagram_code = await gigachat_client.generate_diagram_code(request_text)
-        
         await status_message.edit_text("🔨 Создаю диаграмму...")
         
-        # Генерируем диаграмму
-        diagram_path = await diagram_generator.generate_diagram(diagram_code, user_id)
-        
+        # Генерируем диаграмму с повторными попытками
+        result = await generate_diagram_with_retries(diagram_code, user_id, gigachat_client, max_attempts=3)
+        if isinstance(result, str):
+            diagram_path = result
+        else:
+            diagram_path, last_code, last_error = result if isinstance(result, tuple) and len(result) == 3 else (None, None, None)
         # Отправляем диаграмму пользователю
         if diagram_path and os.path.exists(diagram_path):
             await status_message.edit_text("📤 Отправляю диаграмму...")
-            
             diagram_file = FSInputFile(diagram_path)
             await message.answer_photo(
                 diagram_file,
                 caption=f"📊 **Диаграмма готова!**\n\n**Запрос:** {request_text}",
                 parse_mode="Markdown"
             )
-            
             # Удаляем временный файл
             try:
                 os.remove(diagram_path)
             except:
                 pass
-                
             await status_message.delete()
-            
             # Предлагаем создать еще одну диаграмму
             await message.answer(
                 "✨ **Диаграмма создана успешно!**\n\n"
                 "Хотите создать еще одну диаграмму?",
+                reply_markup=get_main_keyboard(),
+                parse_mode="Markdown"
+            )
+        elif last_code and last_error:
+            # Не удалось получить рабочий скрипт за 3 попытки
+            await status_message.edit_text(
+                "❌ **Не удалось создать рабочий скрипт для диаграммы за 3 попытки.**\n\n"
+                "**Последний вариант скрипта:**\n"
+                f"```python\n{last_code}\n```\n\n"
+                f"**Ошибка:**\n{last_error}",
                 reply_markup=get_main_keyboard(),
                 parse_mode="Markdown"
             )
