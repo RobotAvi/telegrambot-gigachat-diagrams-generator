@@ -1,4 +1,4 @@
-THIS SHOULD BE A LINTER ERRORimport asyncio
+import asyncio
 import logging
 import os
 from aiogram import Bot, Dispatcher, types, F
@@ -365,7 +365,7 @@ async def fix_error_callback(callback: types.CallbackQuery, state: FSMContext):
         
         # Отправляем диаграмму пользователю
         if diagram_path and os.path.exists(diagram_path):
-            await status_message.edit_text("📤 Отправляю исправленную диаграмму...")
+            await execution_message.edit_text("📤 **Отправляю исправленную диаграмму...**", parse_mode="Markdown")
             
             diagram_file = FSInputFile(diagram_path)
             await callback.message.answer_photo(
@@ -380,7 +380,7 @@ async def fix_error_callback(callback: types.CallbackQuery, state: FSMContext):
             except:
                 pass
                 
-            await status_message.delete()
+            await execution_message.delete()
             
             # Предлагаем создать еще одну диаграмму
             await callback.message.answer(
@@ -390,6 +390,13 @@ async def fix_error_callback(callback: types.CallbackQuery, state: FSMContext):
                 parse_mode="Markdown"
             )
         else:
+            # Удаляем сообщение о выполнении
+            if 'execution_message' in locals():
+                try:
+                    await execution_message.delete()
+                except:
+                    pass
+                    
             await status_message.edit_text(
                 "❌ **Не удалось создать диаграмму даже после исправления**\n\n"
                 "Попробуйте изменить формулировку запроса.",
@@ -399,6 +406,13 @@ async def fix_error_callback(callback: types.CallbackQuery, state: FSMContext):
             
     except Exception as e:
         logger.error(f"Ошибка исправления кода: {e}")
+        
+        # Удаляем сообщение о выполнении, если оно существует
+        if 'execution_message' in locals():
+            try:
+                await execution_message.delete()
+            except:
+                pass
         
         await status_message.edit_text(
             f"❌ **Ошибка при исправлении кода**\n\n"
@@ -675,9 +689,16 @@ async def process_diagram_request(message: types.Message, state: FSMContext):
                 'user_request': request_text
             }
             
+            # Удаляем сообщение о выполнении
+            if 'execution_message' in locals():
+                try:
+                    await execution_message.delete()
+                except:
+                    pass
+            
             # Показываем ошибку и предлагаем исправление
             error_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="� Попросить Gigachat исправить", callback_data="fix_error")],
+                [InlineKeyboardButton(text="🔧 Попросить Gigachat исправить", callback_data="fix_error")],
                 [InlineKeyboardButton(text="🔙 Назад в меню", callback_data="back_to_main")]
             ])
             
