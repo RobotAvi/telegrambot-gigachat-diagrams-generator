@@ -2,3 +2,98 @@ Python-dotenv could not parse statement starting at line 1
 2025-07-03 19:48:51,093 - __main__ - INFO - Запуск бота...
 2025-07-03 19:48:51,093 - aiogram.dispatcher - INFO - Start polling
 2025-07-03 19:48:51,369 - aiogram.dispatcher - INFO - Run polling for bot @GptExperiment001_bot id=7705582145 - 'GptExperiment001'
+2025-07-03 19:51:46,552 - aiogram.event - INFO - Update id=669656201 is handled. Duration 282 ms by bot id=7705582145
+2025-07-03 19:51:48,053 - aiogram.event - INFO - Update id=669656202 is handled. Duration 112 ms by bot id=7705582145
+2025-07-03 19:51:51,811 - aiogram.event - INFO - Update id=669656203 is handled. Duration 889 ms by bot id=7705582145
+2025-07-03 19:51:55,132 - aiogram.event - INFO - Update id=669656204 is handled. Duration 105 ms by bot id=7705582145
+2025-07-03 19:52:03,867 - __main__ - ERROR - Ошибка создания диаграммы: Ошибка генерации диаграммы: Ошибка выполнения кода: /usr/bin/python3: can't open file '/workspace/temp/user_256264640_3558/temp/user_256264640_3558/diagram_code.py': [Errno 2] No such file or directory
+
+2025-07-03 19:52:03,951 - aiogram.event - INFO - Update id=669656205 is not handled. Duration 3723 ms by bot id=7705582145
+2025-07-03 19:52:03,951 - aiogram.event - ERROR - Cause exception while process update id=669656205 by bot id=7705582145
+TelegramBadRequest: Telegram server says - Bad Request: can't parse entities: Can't find end of the entity starting at byte offset 275
+Traceback (most recent call last):
+  File "/workspace/diagram_generator.py", line 99, in generate_diagram
+    raise Exception(f"Ошибка выполнения кода: {error_msg}")
+Exception: Ошибка выполнения кода: /usr/bin/python3: can't open file '/workspace/temp/user_256264640_3558/temp/user_256264640_3558/diagram_code.py': [Errno 2] No such file or directory
+
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/workspace/main.py", line 499, in process_diagram_request
+    diagram_path = await diagram_generator.generate_diagram(diagram_code, user_id)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/diagram_generator.py", line 120, in generate_diagram
+    raise Exception(f"Ошибка генерации диаграммы: {str(e)}")
+Exception: Ошибка генерации диаграммы: Ошибка выполнения кода: /usr/bin/python3: can't open file '/workspace/temp/user_256264640_3558/temp/user_256264640_3558/diagram_code.py': [Errno 2] No such file or directory
+
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/aiogram/dispatcher/dispatcher.py", line 309, in _process_update
+    response = await self.feed_update(bot, update, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/aiogram/dispatcher/dispatcher.py", line 158, in feed_update
+    response = await self.update.wrap_outer_middleware(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/aiogram/dispatcher/middlewares/error.py", line 25, in __call__
+    return await handler(event, data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/aiogram/dispatcher/middlewares/user_context.py", line 49, in __call__
+    return await handler(event, data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/aiogram/fsm/middleware.py", line 42, in __call__
+    return await handler(event, data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/aiogram/dispatcher/event/telegram.py", line 121, in trigger
+    return await wrapped_inner(event, kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/aiogram/dispatcher/event/handler.py", line 43, in call
+    return await wrapped()
+           ^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/aiogram/dispatcher/dispatcher.py", line 276, in _listen_update
+    return await self.propagate_event(update_type=update_type, event=event, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/aiogram/dispatcher/router.py", line 142, in propagate_event
+    return await observer.wrap_outer_middleware(_wrapped, event=event, data=kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/aiogram/dispatcher/router.py", line 137, in _wrapped
+    return await self._propagate_event(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        observer=observer, update_type=update_type, event=telegram_event, **data
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/aiogram/dispatcher/router.py", line 162, in _propagate_event
+    response = await observer.trigger(event, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/aiogram/dispatcher/event/telegram.py", line 121, in trigger
+    return await wrapped_inner(event, kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/aiogram/dispatcher/event/handler.py", line 43, in call
+    return await wrapped()
+           ^^^^^^^^^^^^^^^
+  File "/workspace/main.py", line 578, in process_diagram_request
+    await status_message.edit_text(
+    ...<3 lines>...
+    )
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/aiogram/methods/base.py", line 84, in emit
+    return await bot(self)
+           ^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/aiogram/client/bot.py", line 485, in __call__
+    return await self.session(self, method, timeout=request_timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/aiogram/client/session/base.py", line 254, in __call__
+    return cast(TelegramType, await middleware(bot, method))
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/aiogram/client/session/aiohttp.py", line 189, in make_request
+    response = self.check_response(
+        bot=bot, method=method, status_code=resp.status, content=raw_result
+    )
+  File "/home/ubuntu/.local/lib/python3.13/site-packages/aiogram/client/session/base.py", line 120, in check_response
+    raise TelegramBadRequest(method=method, message=description)
+aiogram.exceptions.TelegramBadRequest: Telegram server says - Bad Request: can't parse entities: Can't find end of the entity starting at byte offset 275
