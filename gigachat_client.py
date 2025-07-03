@@ -1,4 +1,4 @@
-import asyncio
+THIS SHOULD BE A LINTER ERRORimport asyncio
 import aiohttp
 import json
 import time
@@ -38,7 +38,7 @@ class GigaChatClient:
     
     def _generate_curl_command(self, method: str, url: str, headers: Dict[str, str], data: Any = None) -> str:
         """Генерирует curl команду для отладки"""
-        curl_parts = [f"curl -k -X {method}"]
+        curl_parts = [f"curl -k --location -X {method}"]
         
         for key, value in headers.items():
             # Маскируем чувствительные данные
@@ -79,7 +79,7 @@ class GigaChatClient:
         headers = {
             'Content-Type': 'application/x-www-form-urlencoded',
             'Accept': 'application/json',
-            'RqUID': str(int(time.time())),
+            'RqUID': str(uuid.uuid4()),
             'Authorization': f'Basic {self.client_secret}'
         }
         
