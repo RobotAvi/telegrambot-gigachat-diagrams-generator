@@ -37,7 +37,7 @@ class GigaChatClient:
     
     def _generate_curl_command(self, method: str, url: str, headers: Dict[str, str], data: Any = None) -> str:
         """Генерирует curl команду для отладки"""
-        curl_parts = [f"curl -X {method}"]
+        curl_parts = [f"curl -k -X {method}"]
         
         for key, value in headers.items():
             # Маскируем чувствительные данные
