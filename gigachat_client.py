@@ -1,4 +1,4 @@
-THIS SHOULD BE A LINTER ERRORimport asyncio
+import asyncio
 import aiohttp
 import json
 import time
@@ -44,13 +44,13 @@ class GigaChatClient:
             # Маскируем чувствительные данные
             if key.lower() == 'authorization':
                 if value.startswith('Basic '):
-                    curl_parts.append(f'-H "{key}: Basic [MASKED_BASE64_KEY]"')
+                    curl_parts.append(f"--header '{key}: Basic [MASKED_BASE64_KEY]'")
                 elif value.startswith('Bearer '):
-                    curl_parts.append(f'-H "{key}: Bearer [MASKED_TOKEN]"')
+                    curl_parts.append(f"--header '{key}: Bearer [MASKED_TOKEN]'")
                 else:
-                    curl_parts.append(f'-H "{key}: [MASKED]"')
+                    curl_parts.append(f"--header '{key}: [MASKED]'")
             else:
-                curl_parts.append(f'-H "{key}: {value}"')
+                curl_parts.append(f"--header '{key}: {value}'")
         
         if data:
             if isinstance(data, dict):
