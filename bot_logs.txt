@@ -97,3 +97,6 @@ Traceback (most recent call last):
   File "/home/ubuntu/.local/lib/python3.13/site-packages/aiogram/client/session/base.py", line 120, in check_response
     raise TelegramBadRequest(method=method, message=description)
 aiogram.exceptions.TelegramBadRequest: Telegram server says - Bad Request: can't parse entities: Can't find end of the entity starting at byte offset 275
+2025-07-03 19:57:28,821 - aiogram.dispatcher - WARNING - Received SIGTERM signal
+2025-07-03 19:57:28,821 - aiogram.dispatcher - INFO - Polling stopped for bot @GptExperiment001_bot id=7705582145 - 'GptExperiment001'
+2025-07-03 19:57:28,821 - aiogram.dispatcher - INFO - Polling stopped

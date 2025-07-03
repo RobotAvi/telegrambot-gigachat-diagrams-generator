@@ -259,6 +259,128 @@ class GigaChatClient:
                 self.last_error_details['error'] = str(e)
             raise
     
+    async def fix_diagram_code(self, original_code: str, error_message: str, user_request: str) -> str:
+        """Исправляет код диаграммы на основе ошибки"""
+        if not self.client_secret:
+            raise ValueError("API ключ не установлен")
+            
+        access_token = await self._get_access_token()
+        
+        headers = {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'Authorization': f'Bearer {access_token}'
+        }
+        
+        fix_prompt = f"""Исправь этот Python код для создания диаграммы. Код должен использовать библиотеку diagrams и создавать файл output.png.
+
+Исходный запрос пользователя: {user_request}
+
+Код с ошибкой:
+```python
+{original_code}
+```
+
+Ошибка:
+{error_message}
+
+Верни только исправленный Python код без объяснений."""
+
+        payload = {
+            "model": self.selected_model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": GIGACHAT_SYSTEM_PROMPT
+                },
+                {
+                    "role": "user", 
+                    "content": fix_prompt
+                }
+            ],
+            "max_tokens": 2048,
+            "temperature": 0.1
+        }
+        
+        # Генерируем curl команду для диагностики
+        curl_command = self._generate_curl_command('POST', f"{GIGACHAT_BASE_URL}/chat/completions", headers, payload)
+        
+        self.last_error_details = {
+            'operation': 'fix_diagram_code',
+            'url': f"{GIGACHAT_BASE_URL}/chat/completions",
+            'method': 'POST',
+            'headers': {k: ('[MASKED]' if k.lower() == 'authorization' else v) for k, v in headers.items()},
+            'payload': payload,
+            'curl_command': curl_command,
+            'timestamp': time.time()
+        }
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{GIGACHAT_BASE_URL}/chat/completions",
+                    headers=headers,
+                    json=payload,
+                    ssl=False
+                ) as response:
+                    response_text = await response.text()
+                    
+                    # Обновляем детали с информацией о ответе
+                    self.last_error_details.update({
+                        'response_status': response.status,
+                        'response_headers': dict(response.headers),
+                        'response_text': response_text[:1000] if len(response_text) > 1000 else response_text,
+                        'response_length': len(response_text)
+                    })
+                    
+                    if response.status != 200:
+                        error_msg = f"Ошибка API: {response.status}"
+                        try:
+                            error_data = json.loads(response_text)
+                            if 'error' in error_data:
+                                error_msg += f" - {error_data['error']}"
+                        except:
+                            pass
+                        
+                        self.last_error_details['error'] = error_msg
+                        raise Exception(error_msg)
+                        
+                    result = json.loads(response_text)
+                    
+                    if 'choices' not in result or not result['choices']:
+                        self.last_error_details['error'] = "Пустой ответ от API"
+                        raise Exception("Пустой ответ от API")
+                        
+                    content = result['choices'][0]['message']['content']
+                    
+                    # Успешная операция
+                    self.last_error_details['success'] = True
+                    self.last_error_details['response_content_length'] = len(content)
+                    
+                    # Извлекаем код из markdown блока
+                    if '```python' in content:
+                        code_start = content.find('```python') + 9
+                        code_end = content.find('```', code_start)
+                        if code_end != -1:
+                            return content[code_start:code_end].strip()
+                    elif '```' in content:
+                        code_start = content.find('```') + 3
+                        code_end = content.find('```', code_start)
+                        if code_end != -1:
+                            return content[code_start:code_end].strip()
+                    
+                    return content.strip()
+        except aiohttp.ClientError as e:
+            self.last_error_details['error'] = f"Ошибка соединения: {str(e)}"
+            raise Exception(f"Ошибка соединения: {str(e)}")
+        except json.JSONDecodeError as e:
+            self.last_error_details['error'] = f"Ошибка парсинга JSON: {str(e)}"
+            raise Exception(f"Ошибка парсинга ответа: {str(e)}")
+        except Exception as e:
+            if 'error' not in self.last_error_details:
+                self.last_error_details['error'] = str(e)
+            raise
+
     async def generate_diagram_code(self, user_request: str) -> str:
         """Генерирует код диаграммы на основе запроса пользователя"""
         if not self.client_secret:

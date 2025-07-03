@@ -30,6 +30,7 @@ class UserStates(StatesGroup):
     waiting_api_key = State()
     waiting_diagram_request = State()
     selecting_model = State()
+    waiting_error_fix_confirmation = State()
 
 
 # Хранилище API ключей пользователей (в реальном приложении лучше использовать базу данных)
@@ -37,6 +38,9 @@ user_api_keys = {}
 
 # Хранилище выбранных моделей пользователей
 user_models = {}
+
+# Хранилище контекста ошибок для исправления
+user_error_context = {}
 
 
 def get_main_keyboard():
@@ -303,9 +307,108 @@ async def model_selected_callback(callback: types.CallbackQuery):
         )
 
 
+@dp.callback_query(F.data == "fix_error")
+async def fix_error_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Обработчик исправления ошибки через Gigachat"""
+    user_id = callback.from_user.id
+    
+    if user_id not in user_error_context:
+        await callback.message.edit_text(
+            "❌ Контекст ошибки не найден. Попробуйте создать диаграмму заново.",
+            reply_markup=get_main_keyboard(),
+            parse_mode="Markdown"
+        )
+        return
+    
+    if user_id not in user_api_keys:
+        await callback.message.edit_text(
+            "❌ API ключ не найден. Установите ключ заново.",
+            reply_markup=get_main_keyboard(),
+            parse_mode="Markdown"
+        )
+        return
+    
+    # Устанавливаем API ключ
+    gigachat_client.set_credentials(user_api_keys[user_id])
+    
+    # Получаем контекст ошибки
+    error_context = user_error_context[user_id]
+    
+    status_message = await callback.message.edit_text("🔧 Прошу Gigachat исправить код...")
+    
+    try:
+        # Просим Gigachat исправить код
+        fixed_code = await gigachat_client.fix_diagram_code(
+            error_context['original_code'],
+            error_context['error_message'],
+            error_context['user_request']
+        )
+        
+        await status_message.edit_text("🔨 Пытаюсь выполнить исправленный код...")
+        
+        # Пытаемся выполнить исправленный код
+        diagram_path = await diagram_generator.generate_diagram(fixed_code, user_id)
+        
+        # Очищаем контекст ошибки
+        del user_error_context[user_id]
+        
+        # Отправляем диаграмму пользователю
+        if diagram_path and os.path.exists(diagram_path):
+            await status_message.edit_text("📤 Отправляю исправленную диаграмму...")
+            
+            diagram_file = FSInputFile(diagram_path)
+            await callback.message.answer_photo(
+                diagram_file,
+                caption=f"📊 **Диаграмма исправлена и готова!**\n\n**Запрос:** {error_context['user_request']}",
+                parse_mode="Markdown"
+            )
+            
+            # Удаляем временный файл
+            try:
+                os.remove(diagram_path)
+            except:
+                pass
+                
+            await status_message.delete()
+            
+            # Предлагаем создать еще одну диаграмму
+            await callback.message.answer(
+                "✨ **Диаграмма успешно исправлена!**\n\n"
+                "Gigachat смог исправить ошибку в коде. Хотите создать еще одну диаграмму?",
+                reply_markup=get_main_keyboard(),
+                parse_mode="Markdown"
+            )
+        else:
+            await status_message.edit_text(
+                "❌ **Не удалось создать диаграмму даже после исправления**\n\n"
+                "Попробуйте изменить формулировку запроса.",
+                reply_markup=get_main_keyboard(),
+                parse_mode="Markdown"
+            )
+            
+    except Exception as e:
+        logger.error(f"Ошибка исправления кода: {e}")
+        
+        await status_message.edit_text(
+            f"❌ **Ошибка при исправлении кода**\n\n"
+            f"**Ошибка:** {str(e)}\n\n"
+            f"Gigachat не смог исправить код. Попробуйте изменить запрос или создать диаграмму заново.",
+            reply_markup=get_main_keyboard(),
+            parse_mode="Markdown"
+        )
+    
+    await state.clear()
+
+
 @dp.callback_query(F.data == "back_to_main")
-async def back_to_main_callback(callback: types.CallbackQuery):
+async def back_to_main_callback(callback: types.CallbackQuery, state: FSMContext):
     """Обработчик возврата в главное меню"""
+    # Очищаем состояние и контекст ошибки
+    await state.clear()
+    user_id = callback.from_user.id
+    if user_id in user_error_context:
+        del user_error_context[user_id]
+    
     await callback.message.edit_text(
         "🏠 **Главное меню**\n\n"
         "Выберите действие:",
@@ -535,46 +638,44 @@ async def process_diagram_request(message: types.Message, state: FSMContext):
     except Exception as e:
         logger.error(f"Ошибка создания диаграммы: {e}")
         
-        # Получаем детали ошибки для диагностики
-        error_details = gigachat_client.get_last_error_details()
-        
-        error_text = f"❌ **Ошибка создания диаграммы**\n\n"
-        error_text += f"**Ошибка:** {str(e)}\n\n"
-        
-        if error_details:
-            if not error_details.get('success', False):
-                error_text += "**📋 Детали запроса к API:**\n"
-                error_text += format_error_details(error_details)
-        
-        error_text += "\n**💡 Попробуйте:**\n"
-        error_text += "• Изменить формулировку запроса\n"
-        error_text += "• Использовать более простое описание\n"
-        error_text += "• Повторить попытку позже"
-        
-        # Если сообщение слишком длинное, разбиваем на части
-        if len(error_text) > 4000:
+        # Сохраняем контекст ошибки для возможного исправления
+        if 'diagram_code' in locals():
+            user_error_context[user_id] = {
+                'original_code': diagram_code,
+                'error_message': str(e),
+                'user_request': request_text
+            }
+            
+            # Показываем ошибку и предлагаем исправление
+            error_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="� Попросить Gigachat исправить", callback_data="fix_error")],
+                [InlineKeyboardButton(text="🔙 Назад в меню", callback_data="back_to_main")]
+            ])
+            
             await status_message.edit_text(
                 f"❌ **Ошибка создания диаграммы**\n\n"
                 f"**Ошибка:** {str(e)}\n\n"
-                "Отправляю подробную диагностику...",
-                parse_mode="Markdown"
-            )
-            
-            if error_details and not error_details.get('success', False):
-                await message.answer(
-                    "**📋 Детали запроса к API:**\n" + format_error_details(error_details),
-                    parse_mode="Markdown"
-                )
-            
-            await message.answer(
-                "**💡 Попробуйте:**\n"
-                "• Изменить формулировку запроса\n"
-                "• Использовать более простое описание\n"
-                "• Повторить попытку позже",
-                reply_markup=get_main_keyboard(),
+                f"💡 Я могу попросить Gigachat проанализировать ошибку и исправить код. "
+                f"Хотите попробовать?",
+                reply_markup=error_keyboard,
                 parse_mode="Markdown"
             )
         else:
+            # Если нет сгенерированного кода (ошибка на этапе генерации)
+            error_text = f"❌ **Ошибка создания диаграммы**\n\n"
+            error_text += f"**Ошибка:** {str(e)}\n\n"
+            
+            # Получаем детали ошибки для диагностики API
+            error_details = gigachat_client.get_last_error_details()
+            if error_details and not error_details.get('success', False):
+                error_text += "**📋 Детали запроса к API:**\n"
+                error_text += format_error_details(error_details)
+            
+            error_text += "\n**💡 Попробуйте:**\n"
+            error_text += "• Изменить формулировку запроса\n"
+            error_text += "• Использовать более простое описание\n"
+            error_text += "• Повторить попытку позже"
+            
             await status_message.edit_text(
                 error_text,
                 reply_markup=get_main_keyboard(),
