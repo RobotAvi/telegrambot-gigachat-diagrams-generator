@@ -93,7 +93,9 @@ def format_error_details(error_details: dict, show_sensitive=False) -> str:
     
     # Curl команда
     if 'curl_command' in error_details:
-        result.append(f"\n**Эквивалентная curl команда:**\n```bash\n{error_details['curl_command']}\n```")
+        # Экранируем специальные символы для Telegram markdown
+        curl_command = error_details['curl_command'].replace('_', '\\_').replace('*', '\\*').replace('`', '\\`')
+        result.append(f"\n**Эквивалентная curl команда:**\n```\n{curl_command}\n```")
     
     # Ошибка
     if 'error' in error_details:

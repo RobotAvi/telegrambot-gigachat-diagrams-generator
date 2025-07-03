@@ -22,9 +22,8 @@ class DiagramGenerator:
         if len(code) > MAX_CODE_LENGTH:
             return False
             
-        # Запрещенные импорты и функции
+        # Запрещенные импорты и функции (кроме os для смены директории)
         forbidden_patterns = [
-            'import os',
             'import sys', 
             'import subprocess',
             'import shutil',
