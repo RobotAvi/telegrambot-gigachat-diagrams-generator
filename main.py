@@ -53,7 +53,10 @@ def get_main_keyboard():
 @dp.message(Command("start"))
 async def start_command(message: types.Message):
     """Обработчик команды /start"""
-    welcome_text = """
+    user_id = message.from_user.id
+    current_model = user_models.get(user_id, "GigaChat-Pro")
+    
+    welcome_text = f"""
 🚀 **Добро пожаловать в Diagram Generator Bot!**
 
 Этот бот поможет вам создавать диаграммы с помощью искусственного интеллекта Гигачат.
@@ -63,10 +66,15 @@ async def start_command(message: types.Message):
 🔧 Генерирует Python код с использованием библиотеки diagrams
 🖼️ Отправляет готовые диаграммы в формате PNG
 
+**Текущие настройки:**
+🤖 Активная модель: **{current_model}**
+{'🔑 API ключ: ✅ Установлен' if user_id in user_api_keys else '🔑 API ключ: ❌ Не установлен'}
+
 **Для начала работы:**
 1. Установите ваш API ключ Гигачата
-2. Опишите какую диаграмму хотите создать
-3. Получите готовое изображение!
+2. Выберите подходящую модель GigaChat
+3. Опишите какую диаграмму хотите создать
+4. Получите готовое изображение!
 
 Выберите действие из меню ниже:
     """
@@ -121,6 +129,102 @@ async def create_diagram_callback(callback: types.CallbackQuery, state: FSMConte
     await state.set_state(UserStates.waiting_diagram_request)
 
 
+@dp.callback_query(F.data == "select_model")
+async def select_model_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Обработчик выбора модели"""
+    user_id = callback.from_user.id
+    
+    if user_id not in user_api_keys:
+        await callback.message.edit_text(
+            "❌ **API ключ не установлен**\n\n"
+            "Для выбора модели необходимо сначала установить API ключ Гигачата.",
+            reply_markup=get_main_keyboard(),
+            parse_mode="Markdown"
+        )
+        return
+    
+    await callback.message.edit_text(
+        "🔄 **Загружаю доступные модели...**",
+        parse_mode="Markdown"
+    )
+    
+    try:
+        # Устанавливаем API ключ для запроса
+        gigachat_client.set_credentials(user_api_keys[user_id])
+        
+        # Получаем список моделей
+        models = await gigachat_client.get_available_models()
+        
+        # Текущая модель
+        current_model = user_models.get(user_id, "GigaChat-Pro")
+        
+        # Создаем клавиатуру с моделями
+        keyboard_buttons = []
+        for model in models:
+            model_id = model["id"]
+            description = model["description"]
+            
+            # Отмечаем текущую модель
+            text = f"{'✅ ' if model_id == current_model else ''}🤖 {description}"
+            keyboard_buttons.append([
+                InlineKeyboardButton(text=text, callback_data=f"model_{model_id}")
+            ])
+        
+        keyboard_buttons.append([
+            InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main")
+        ])
+        
+        keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
+        
+        await callback.message.edit_text(
+            f"🤖 **Выбор модели GigaChat**\n\n"
+            f"**Текущая модель:** {current_model}\n\n"
+            f"Выберите модель для генерации диаграмм:",
+            reply_markup=keyboard,
+            parse_mode="Markdown"
+        )
+        
+    except Exception as e:
+        logger.error(f"Ошибка загрузки моделей: {e}")
+        await callback.message.edit_text(
+            "❌ **Ошибка загрузки моделей**\n\n"
+            "Не удалось получить список доступных моделей. "
+            "Проверьте API ключ и попробуйте позже.",
+            reply_markup=get_main_keyboard(),
+            parse_mode="Markdown"
+        )
+
+
+@dp.callback_query(F.data.startswith("model_"))
+async def model_selected_callback(callback: types.CallbackQuery):
+    """Обработчик выбора конкретной модели"""
+    user_id = callback.from_user.id
+    model_id = callback.data.replace("model_", "")
+    
+    # Сохраняем выбранную модель
+    user_models[user_id] = model_id
+    gigachat_client.set_model(model_id)
+    
+    await callback.message.edit_text(
+        f"✅ **Модель выбрана!**\n\n"
+        f"**Активная модель:** {model_id}\n\n"
+        f"Теперь все диаграммы будут генерироваться с использованием этой модели.",
+        reply_markup=get_main_keyboard(),
+        parse_mode="Markdown"
+    )
+
+
+@dp.callback_query(F.data == "back_to_main")
+async def back_to_main_callback(callback: types.CallbackQuery):
+    """Возврат в главное меню"""
+    await callback.message.edit_text(
+        "🏠 **Главное меню**\n\n"
+        "Выберите действие:",
+        reply_markup=get_main_keyboard(),
+        parse_mode="Markdown"
+    )
+
+
 @dp.callback_query(F.data == "help")
 async def help_callback(callback: types.CallbackQuery):
     """Обработчик помощи"""
@@ -133,9 +237,15 @@ async def help_callback(callback: types.CallbackQuery):
 
 **Как работает бот:**
 1. **Установка API ключа** - вы предоставляете ключ от Гигачата
-2. **Описание диаграммы** - описываете что хотите визуализировать
-3. **Генерация** - Гигачат создает Python код для диаграммы
-4. **Результат** - бот выполняет код и отправляет PNG изображение
+2. **Выбор модели** - выбираете подходящую модель GigaChat
+3. **Описание диаграммы** - описываете что хотите визуализировать
+4. **Генерация** - Гигачат создает Python код для диаграммы
+5. **Результат** - бот выполняет код и отправляет PNG изображение
+
+**Доступные модели:**
+• **GigaChat** - базовая модель (быстрая)
+• **GigaChat-Pro** - продвинутая модель (рекомендуется)
+• **GigaChat-Max** - максимальная модель (самая умная)
 
 **Примеры запросов:**
 • "Создай диаграмму веб-приложения с фронтендом, бэкендом и базой данных"
@@ -221,10 +331,14 @@ async def process_diagram_request(message: types.Message, state: FSMContext):
         await state.clear()
         return
     
-    # Устанавливаем API ключ для текущего запроса
+    # Устанавливаем API ключ и выбранную модель для текущего запроса
     gigachat_client.set_credentials(user_api_keys[user_id])
     
-    status_message = await message.answer("🤖 Генерирую код диаграммы...")
+    # Устанавливаем выбранную пользователем модель
+    selected_model = user_models.get(user_id, "GigaChat-Pro")
+    gigachat_client.set_model(selected_model)
+    
+    status_message = await message.answer(f"🤖 Генерирую код диаграммы с помощью {selected_model}...")
     
     try:
         # Генерируем код диаграммы
