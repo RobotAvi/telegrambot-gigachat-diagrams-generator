@@ -112,9 +112,9 @@ class DiagramGenerator:
 # Глобальный экземпляр генератора
 diagram_generator = DiagramGenerator()
 
-async def generate_diagram_with_retries(code: str, user_id: int, gigachat_client, max_attempts: int = 3):
+async def generate_diagram_with_retries(code: str, user_id: int, llm_client, max_attempts: int = 3):
     """
-    Пытается сгенерировать диаграмму до max_attempts раз, отправляя ошибку и код в gigachat_client.fix_code при неудаче.
+    Пытается сгенерировать диаграмму до max_attempts раз, отправляя ошибку и код в llm_client.fix_code при неудаче.
     Возвращает путь к диаграмме или (None, последний_код, последняя_ошибка) если не удалось.
     """
     last_error = None
@@ -126,10 +126,10 @@ async def generate_diagram_with_retries(code: str, user_id: int, gigachat_client
         except Exception as e:
             last_error = str(e)
             if attempt < max_attempts - 1:
-                # Просим Гигачат исправить код
+                # Просим LLM-провайдера исправить код
                 try:
-                    last_code = await gigachat_client.fix_code(last_code, last_error)
+                    last_code = await llm_client.fix_code(last_code, last_error)
                 except Exception as fix_e:
-                    last_error += f"\nОшибка при обращении к Гигачату для исправления: {fix_e}"
+                    last_error += f"\nОшибка при обращении к LLM-провайдеру для исправления: {fix_e}"
                     break
     return None, last_code, last_error

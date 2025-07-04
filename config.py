@@ -5,6 +5,7 @@ load_dotenv()
 
 # Telegram Bot Token
 BOT_TOKEN = os.getenv('BOT_TOKEN')
+PROXYAPI_KEY = os.getenv('PROXYAPI_KEY')
 
 # GigaChat API Configuration
 GIGACHAT_BASE_URL = "https://gigachat.devices.sberbank.ru/api/v1"
@@ -220,9 +221,6 @@ from diagrams.gcp.ml import VisionAPI, VideoIntelligenceAPI, TranslationAPI, TPU
 from diagrams.gcp.network import VPN, VirtualPrivateCloud, TrafficDirector, StandardNetworkTier, Routes, Router, PremiumNetworkTier, PartnerInterconnect, Network, NAT, LoadBalancing, FirewallRules, ExternalIpAddresses, DNS, DedicatedInterconnect, CDN, Armor
 from diagrams.gcp.security import SecurityScanner, SecurityCommandCenter, ResourceManager, KeyManagementService, IAP, Iam
 from diagrams.gcp.storage import Storage, PersistentDisk, Filestore
-
-# Proxy API Key
-PROXYAPI_KEY = os.getenv('PROXYAPI_KEY')
 
 # ... rest of the file remains unchanged ...
 

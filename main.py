@@ -67,6 +67,7 @@ user_llm_provider = {}  # user_id: "gigachat" / "openai" / ...
 def get_main_keyboard():
     """Возвращает основную клавиатуру бота"""
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🌐 Выбрать провайдера LLM", callback_data="select_llm_provider")],
         [InlineKeyboardButton(text="🔑 Установить API ключ", callback_data="set_api_key")],
         [InlineKeyboardButton(text="🤖 Выбрать модель", callback_data="select_model")],
         [InlineKeyboardButton(text="📊 Создать диаграмму", callback_data="create_diagram")],
@@ -133,13 +134,34 @@ def format_error_details(error_details: dict, show_sensitive=False) -> str:
     return "\n".join(result)
 
 
+def get_provider_name(code):
+    if code == "gigachat":
+        return "GigaChat"
+    elif code == "proxyapi":
+        return "ProxyAPI (OpenAI)"
+    else:
+        return code
+
+
+def get_default_model(provider):
+    if provider == "gigachat":
+        return "GigaChat-Pro"
+    elif provider == "proxyapi":
+        return "gpt-3.5-turbo"
+    else:
+        return "default"
+
+
 @dp.message(Command("start"))
 async def start_command(message: types.Message):
     """Обработчик команды /start"""
-    welcome_text = """
+    user_id = message.from_user.id
+    provider = user_llm_provider.get(user_id, "gigachat")
+    provider_name = get_provider_name(provider)
+    welcome_text = f"""
 🚀 **Добро пожаловать в Diagram Generator Bot!**
 
-Этот бот поможет вам создавать диаграммы с помощью искусственного интеллекта Гигачат.
+Этот бот поможет вам создавать диаграммы с помощью искусственного интеллекта {provider_name}.
 
 **Что умеет бот:**
 📊 Создает диаграммы на основе ваших текстовых описаний
@@ -147,7 +169,7 @@ async def start_command(message: types.Message):
 🖼️ Отправляет готовые диаграммы в формате PNG
 
 **Для начала работы:**
-1. Установите ваш API ключ Гигачата
+1. Установите ваш API ключ {provider_name}
 2. Опишите какую диаграмму хотите создать
 3. Получите готовое изображение!
 
@@ -164,9 +186,15 @@ async def start_command(message: types.Message):
 @dp.callback_query(F.data == "set_api_key")
 async def set_api_key_callback(callback: types.CallbackQuery, state: FSMContext):
     """Обработчик установки API ключа"""
+    user_id = callback.from_user.id
+    provider = user_llm_provider.get(user_id, "gigachat")
+    if provider == "proxyapi":
+        provider_name = "ProxyAPI"
+    else:
+        provider_name = "Гигачата"
     await callback.message.edit_text(
-        "🔑 **Установка API ключа Гигачата**\n\n"
-        "Отправьте ваш API ключ Гигачата.\n"
+        f"🔑 **Установка API ключа {provider_name}**\n\n"
+        f"Отправьте ваш API ключ {provider_name}.\n"
         "Ключ будет сохранен безопасно и использован только для генерации диаграмм.\n\n"
         "Для отмены введите /cancel",
         parse_mode="Markdown"
@@ -208,47 +236,37 @@ async def create_diagram_callback(callback: types.CallbackQuery, state: FSMConte
 async def select_model_callback(callback: types.CallbackQuery, state: FSMContext):
     """Обработчик выбора модели"""
     user_id = callback.from_user.id
-    
+    provider = user_llm_provider.get(user_id, "gigachat")
     if user_id not in user_api_keys:
         await callback.message.edit_text(
             "❌ **API ключ не установлен**\n\n"
-            "Для выбора модели необходимо установить API ключ Гигачата.\n"
+            f"Для выбора модели необходимо установить API ключ выбранного провайдера ({provider}).\n"
             "Нажмите кнопку ниже для установки ключа.",
             reply_markup=get_main_keyboard(),
             parse_mode="Markdown"
         )
         return
-    
-    # Устанавливаем API ключ для текущего запроса
-    llm_client = llm_clients[user_llm_provider.get(user_id, "gigachat")]
+    llm_client = llm_clients[provider]
     llm_client.set_credentials(user_api_keys[user_id])
-    
     status_message = await callback.message.edit_text("🔄 Получаю список доступных моделей...")
-    
     try:
         models = await llm_client.get_available_models()
         current_model = llm_client.get_current_model()
-        
         if models:
             model_buttons = []
             for model in models:
                 model_id = model["id"]
                 model_desc = model["description"]
-                
-                # Добавляем галочку для текущей модели
                 button_text = f"✅ {model_desc}" if model_id == current_model else model_desc
                 model_buttons.append([InlineKeyboardButton(
                     text=button_text, 
                     callback_data=f"model_{model_id}"
                 )])
-            
-            # Добавляем кнопку возврата
             model_buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_main")])
-            
             keyboard = InlineKeyboardMarkup(inline_keyboard=model_buttons)
-            
             await status_message.edit_text(
                 f"🤖 **Выбор модели**\n\n"
+                f"**Текущий провайдер:** {provider}\n"
                 f"**Текущая модель:** {current_model}\n\n"
                 f"Выберите модель для генерации диаграмм:",
                 reply_markup=keyboard,
@@ -256,42 +274,33 @@ async def select_model_callback(callback: types.CallbackQuery, state: FSMContext
             )
         else:
             await status_message.edit_text(
-                "❌ **Не удалось получить список моделей**\n\n"
+                f"❌ **Не удалось получить список моделей у провайдера {provider}**\n\n"
                 "Используется модель по умолчанию: GigaChat-Pro",
                 reply_markup=get_main_keyboard(),
                 parse_mode="Markdown"
             )
-            
     except Exception as e:
         logger.error(f"Ошибка получения моделей: {e}")
-        
-        # Получаем детали ошибки для диагностики
         error_details = llm_client.get_last_error_details()
-        
-        error_text = "❌ **Ошибка получения моделей**\n\n"
+        error_text = f"❌ **Ошибка получения моделей у провайдера {provider}**\n\n"
         error_text += f"**Ошибка:** {str(e)}\n\n"
-        
         if error_details and not error_details.get('success', False):
             error_text += "**📋 Детали запроса к API:**\n"
             error_text += format_error_details(error_details)
-        
-        # Если сообщение слишком длинное, разбиваем на части
         if len(error_text) > 4000:
             await status_message.edit_text(
-                "❌ **Ошибка получения моделей**\n\n"
+                f"❌ **Ошибка получения моделей у провайдера {provider}**\n\n"
                 f"**Ошибка:** {str(e)}\n\n"
                 "Отправляю подробную диагностику...",
                 parse_mode="Markdown"
             )
-            
             if error_details and not error_details.get('success', False):
                 await callback.message.answer(
                     "**📋 Детали запроса к API:**\n" + format_error_details(error_details),
                     parse_mode="Markdown"
                 )
-            
             await callback.message.answer(
-                "Используется модель по умолчанию: GigaChat-Pro",
+                f"Используется модель по умолчанию: GigaChat-Pro",
                 reply_markup=get_main_keyboard()
             )
         else:
@@ -342,19 +351,22 @@ async def back_to_main_callback(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data == "help")
 async def help_callback(callback: types.CallbackQuery):
-    """Обработчик помощи"""
-    help_text = """
+    help_text = f"""
 🆘 **Справка по использованию бота**
+
+**Бот поддерживает несколько LLM-провайдеров:**
+• GigaChat
+• ProxyAPI (OpenAI)
 
 **Основные команды:**
 • /start - Главное меню
 • /cancel - Отмена текущего действия
 
 **Как работает бот:**
-1. **Установка API ключа** - вы предоставляете ключ от Гигачата
-2. **Описание диаграммы** - описываете что хотите визуализировать
-3. **Генерация** - Гигачат создает Python код для диаграммы
-4. **Результат** - бот выполняет код и отправляет PNG изображение
+1. **Установка API ключа** — вы предоставляете ключ выбранного провайдера
+2. **Описание диаграммы** — описываете, что хотите визуализировать
+3. **Генерация** — выбранный провайдер создает Python-код для диаграммы
+4. **Результат** — бот выполняет код и отправляет PNG изображение
 
 **Примеры запросов:**
 • "Создай диаграмму веб-приложения с фронтендом, бэкендом и базой данных"
@@ -363,15 +375,14 @@ async def help_callback(callback: types.CallbackQuery):
 
 **Поддерживаемые типы диаграмм:**
 • Архитектурные диаграммы
-• Сетевые топологии  
+• Сетевые топологии
 • Диаграммы процессов
 • Схемы развертывания
 • И многое другое!
 
 **Техническая информация:**
-Бот использует библиотеку diagrams для Python, которая поддерживает множество провайдеров облачных сервисов (AWS, Azure, GCP) и других компонентов.
-    """
-    
+Бот использует библиотеку diagrams для Python, поддерживающую множество облачных и on-prem провайдеров.
+"""
     await callback.message.edit_text(
         help_text,
         reply_markup=get_main_keyboard(),
@@ -384,40 +395,37 @@ async def process_api_key(message: types.Message, state: FSMContext):
     """Обработчик ввода API ключа"""
     api_key = message.text.strip()
     user_id = message.from_user.id
-    
+    provider = user_llm_provider.get(user_id, "gigachat")
     # Удаляем сообщение с API ключом из соображений безопасности
     try:
         await message.delete()
     except:
         pass
-    
     # Проверяем API ключ
-    status_message = await message.answer("🔄 Проверяю API ключ...")
-    
+    if provider == "proxyapi":
+        provider_name = "ProxyAPI"
+    else:
+        provider_name = "Гигачата"
+    status_message = await message.answer(f"🔄 Проверяю API ключ {provider_name}...")
     try:
-        llm_client = llm_clients[user_llm_provider.get(user_id, "gigachat")]
+        llm_client = llm_clients[provider]
         llm_client.set_credentials(api_key)
         is_valid, error_message = await llm_client.check_credentials()
-        
         if is_valid:
             user_api_keys[user_id] = api_key
             save_user_data()
             await status_message.edit_text(
-                "✅ **API ключ успешно установлен!**\n\n"
+                f"✅ **API ключ {provider_name} успешно установлен!**\n\n"
                 "Теперь вы можете создавать диаграммы.\n"
                 "Выберите действие из меню:",
                 reply_markup=get_main_keyboard(),
                 parse_mode="Markdown"
             )
         else:
-            # Получаем детали ошибки
             error_details = llm_client.get_last_error_details()
-            
-            error_text = "❌ **Неверный API ключ**\n\n"
-            
+            error_text = f"❌ **Неверный API ключ {provider_name}**\n\n"
             if error_message:
                 error_text += f"**Ошибка:** {error_message}\n\n"
-            
             if error_details:
                 error_text += format_error_details(error_details)
                 error_text += "\n\n**💡 Рекомендации:**\n"
@@ -427,21 +435,17 @@ async def process_api_key(message: types.Message, state: FSMContext):
                 error_text += "• Сравните с запросом в Postman"
             else:
                 error_text += "Проверьте правильность ключа и попробуйте снова."
-            
-            # Если сообщение слишком длинное, разбиваем на части
             if len(error_text) > 4000:
                 await status_message.edit_text(
-                    "❌ **Неверный API ключ**\n\n"
+                    f"❌ **Неверный API ключ {provider_name}**\n\n"
                     f"**Ошибка:** {error_message}\n\n"
                     "Отправляю подробную диагностику...",
                     parse_mode="Markdown"
                 )
-                
                 await message.answer(
                     format_error_details(error_details),
                     parse_mode="Markdown"
                 )
-                
                 await message.answer(
                     "**💡 Рекомендации:**\n"
                     "• Проверьте правильность API ключа\n"
@@ -459,31 +463,23 @@ async def process_api_key(message: types.Message, state: FSMContext):
                 )
     except Exception as e:
         logger.error(f"Ошибка проверки API ключа: {e}")
-        
-        # Получаем детали ошибки для диагностики
         error_details = llm_client.get_last_error_details()
-        
-        error_text = "❌ **Ошибка проверки API ключа**\n\n"
+        error_text = f"❌ **Ошибка проверки API ключа {provider_name}**\n\n"
         error_text += f"**Ошибка:** {str(e)}\n\n"
-        
         if error_details:
             error_text += format_error_details(error_details)
-        
-        # Если сообщение слишком длинное, разбиваем на части
         if len(error_text) > 4000:
             await status_message.edit_text(
-                "❌ **Ошибка проверки API ключа**\n\n"
+                f"❌ **Ошибка проверки API ключа {provider_name}**\n\n"
                 f"**Ошибка:** {str(e)}\n\n"
                 "Отправляю подробную диагностику...",
                 parse_mode="Markdown"
             )
-            
             if error_details:
                 await message.answer(
                     format_error_details(error_details),
                     parse_mode="Markdown"
                 )
-            
             await message.answer(
                 "Попробуйте позже или обратитесь к администратору.",
                 reply_markup=get_main_keyboard()
@@ -494,7 +490,6 @@ async def process_api_key(message: types.Message, state: FSMContext):
                 reply_markup=get_main_keyboard(),
                 parse_mode="Markdown"
             )
-    
     await state.clear()
 
 
@@ -647,6 +642,35 @@ async def unknown_message(message: types.Message):
         "🤔 Я не понимаю эту команду.\n\n"
         "Используйте меню для взаимодействия с ботом:",
         reply_markup=get_main_keyboard()
+    )
+
+
+@dp.callback_query(F.data == "select_llm_provider")
+async def select_llm_provider_callback(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    current_provider = user_llm_provider.get(user_id, "gigachat")
+    buttons = [
+        [InlineKeyboardButton(text=("✅ " if current_provider=="gigachat" else "")+"GigaChat", callback_data="llmprov_gigachat")],
+        [InlineKeyboardButton(text=("✅ " if current_provider=="proxyapi" else "")+"ProxyAPI (OpenAI)", callback_data="llmprov_proxyapi")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_main")]
+    ]
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    await callback.message.edit_text(
+        f"🌐 <b>Выбор LLM-провайдера</b>\n\nТекущий: <b>{current_provider}</b>\n\nВыберите провайдера для генерации кода диаграмм:",
+        reply_markup=keyboard,
+        parse_mode="HTML"
+    )
+
+
+@dp.callback_query(F.data.startswith("llmprov_"))
+async def llm_provider_selected_callback(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    provider = callback.data.replace("llmprov_", "")
+    user_llm_provider[user_id] = provider
+    await callback.message.edit_text(
+        f"✅ Провайдер LLM выбран: <b>{provider}</b>\n\nТеперь генерация диаграмм будет выполняться через выбранного провайдера.",
+        reply_markup=get_main_keyboard(),
+        parse_mode="HTML"
     )
 
 

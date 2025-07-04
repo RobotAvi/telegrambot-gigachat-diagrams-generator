@@ -3,9 +3,16 @@ import aiohttp
 import json
 
 class ProxyApiClient(BaseLLMClient):
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str = None):
         self.api_key = api_key
         self.model = "gpt-3.5-turbo"  # Можно сделать настраиваемым
+        self.last_error_details = None
+
+    def set_credentials(self, api_key: str):
+        self.api_key = api_key
+
+    def get_last_error_details(self):
+        return self.last_error_details
 
     async def generate_diagram_code(self, user_request: str) -> str:
         url = "https://proxyapi.ru/v1/chat/completions"
