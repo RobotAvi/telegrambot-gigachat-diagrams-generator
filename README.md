@@ -62,7 +62,9 @@ cp .env.example .env
 
 Отредактируйте `.env` файл:
 ```env
-BOT_TOKEN=your_telegram_bot_token_here
+BOT_TOKEN=ваш_telegram_bot_token
+PROXYAPI_KEY=ваш_proxyapi_key
+GIGACHAT_CLIENT_SECRET=ваш_gigachat_client_secret
 ```
 
 ### 5. Получите необходимые API ключи

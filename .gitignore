@@ -45,3 +45,4 @@ Thumbs.db
 
 # Сгенерированные файлы кода
 generated_*.py
+user_data.json

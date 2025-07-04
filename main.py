@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import json
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
@@ -8,9 +9,11 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, FSInputFile
 
-from config import BOT_TOKEN
-from gigachat_client import gigachat_client
+from config import BOT_TOKEN, PROXYAPI_KEY
+from gigachat_client import gigachat_client, GigaChatClient
 from diagram_generator import diagram_generator, generate_diagram_with_retries
+from base_llm_client import BaseLLMClient
+from proxyapi_client import ProxyApiClient
 
 
 # Настройка логирования
@@ -24,6 +27,22 @@ logger = logging.getLogger(__name__)
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
+USER_DATA_FILE = "user_data.json"
+
+def load_user_data():
+    try:
+        with open(USER_DATA_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data.get("api_keys", {}), data.get("models", {})
+    except Exception:
+        return {}, {}
+
+def save_user_data():
+    with open(USER_DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump({"api_keys": user_api_keys, "models": user_models}, f)
+
+# Загрузка при старте
+user_api_keys, user_models = load_user_data()
 
 # Состояния для FSM
 class UserStates(StatesGroup):
@@ -32,11 +51,17 @@ class UserStates(StatesGroup):
     selecting_model = State()
 
 
-# Хранилище API ключей пользователей (в реальном приложении лучше использовать базу данных)
-user_api_keys = {}
-
 # Хранилище выбранных моделей пользователей
 user_models = {}
+
+# Словарь клиентов LLM
+llm_clients = {
+    "gigachat": GigaChatClient(),
+    "proxyapi": ProxyApiClient(api_key=PROXYAPI_KEY),
+    # "openai": OpenAIClient(),  # пример для будущего расширения
+}
+# Хранилище выбранных провайдеров пользователями
+user_llm_provider = {}  # user_id: "gigachat" / "openai" / ...
 
 
 def get_main_keyboard():
@@ -195,13 +220,14 @@ async def select_model_callback(callback: types.CallbackQuery, state: FSMContext
         return
     
     # Устанавливаем API ключ для текущего запроса
-    gigachat_client.set_credentials(user_api_keys[user_id])
+    llm_client = llm_clients[user_llm_provider.get(user_id, "gigachat")]
+    llm_client.set_credentials(user_api_keys[user_id])
     
     status_message = await callback.message.edit_text("🔄 Получаю список доступных моделей...")
     
     try:
-        models = await gigachat_client.get_available_models()
-        current_model = gigachat_client.get_current_model()
+        models = await llm_client.get_available_models()
+        current_model = llm_client.get_current_model()
         
         if models:
             model_buttons = []
@@ -240,7 +266,7 @@ async def select_model_callback(callback: types.CallbackQuery, state: FSMContext
         logger.error(f"Ошибка получения моделей: {e}")
         
         # Получаем детали ошибки для диагностики
-        error_details = gigachat_client.get_last_error_details()
+        error_details = llm_client.get_last_error_details()
         
         error_text = "❌ **Ошибка получения моделей**\n\n"
         error_text += f"**Ошибка:** {str(e)}\n\n"
@@ -283,9 +309,11 @@ async def model_selected_callback(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     
     if user_id in user_api_keys:
-        gigachat_client.set_credentials(user_api_keys[user_id])
-        gigachat_client.set_model(model_id)
+        llm_client = llm_clients[user_llm_provider.get(user_id, "gigachat")]
+        llm_client.set_credentials(user_api_keys[user_id])
+        llm_client.set_model(model_id)
         user_models[user_id] = model_id
+        save_user_data()
         
         await callback.message.edit_text(
             f"✅ **Модель выбрана!**\n\n"
@@ -367,11 +395,13 @@ async def process_api_key(message: types.Message, state: FSMContext):
     status_message = await message.answer("🔄 Проверяю API ключ...")
     
     try:
-        gigachat_client.set_credentials(api_key)
-        is_valid, error_message = await gigachat_client.check_credentials()
+        llm_client = llm_clients[user_llm_provider.get(user_id, "gigachat")]
+        llm_client.set_credentials(api_key)
+        is_valid, error_message = await llm_client.check_credentials()
         
         if is_valid:
             user_api_keys[user_id] = api_key
+            save_user_data()
             await status_message.edit_text(
                 "✅ **API ключ успешно установлен!**\n\n"
                 "Теперь вы можете создавать диаграммы.\n"
@@ -381,7 +411,7 @@ async def process_api_key(message: types.Message, state: FSMContext):
             )
         else:
             # Получаем детали ошибки
-            error_details = gigachat_client.get_last_error_details()
+            error_details = llm_client.get_last_error_details()
             
             error_text = "❌ **Неверный API ключ**\n\n"
             
@@ -431,7 +461,7 @@ async def process_api_key(message: types.Message, state: FSMContext):
         logger.error(f"Ошибка проверки API ключа: {e}")
         
         # Получаем детали ошибки для диагностики
-        error_details = gigachat_client.get_last_error_details()
+        error_details = llm_client.get_last_error_details()
         
         error_text = "❌ **Ошибка проверки API ключа**\n\n"
         error_text += f"**Ошибка:** {str(e)}\n\n"
@@ -483,17 +513,18 @@ async def process_diagram_request(message: types.Message, state: FSMContext):
         return
     
     # Устанавливаем API ключ для текущего запроса
-    gigachat_client.set_credentials(user_api_keys[user_id])
+    llm_client = llm_clients[user_llm_provider.get(user_id, "gigachat")]
+    llm_client.set_credentials(user_api_keys[user_id])
     
     status_message = await message.answer("🤖 Генерирую код диаграммы...")
     
     try:
         # Генерируем код диаграммы
-        diagram_code = await gigachat_client.generate_diagram_code(request_text)
+        diagram_code = await llm_client.generate_diagram_code(request_text)
         await status_message.edit_text("🔨 Создаю диаграмму...")
         
         # Генерируем диаграмму с повторными попытками
-        result = await generate_diagram_with_retries(diagram_code, user_id, gigachat_client, max_attempts=3)
+        result = await generate_diagram_with_retries(diagram_code, user_id, llm_client, max_attempts=3)
         if isinstance(result, str):
             diagram_path = result
         else:
@@ -507,9 +538,17 @@ async def process_diagram_request(message: types.Message, state: FSMContext):
                 caption=f"📊 **Диаграмма готова!**\n\n**Запрос:** {request_text}",
                 parse_mode="Markdown"
             )
-            # Удаляем временный файл
+            # Отправляем исходный скрипт отдельным сообщением
+            await message.answer(
+                f"**Исходный скрипт диаграммы:**\n```python\n{diagram_code}\n```",
+                parse_mode="Markdown"
+            )
+            # Удаляем временный файл (если он в temp)
             try:
-                os.remove(diagram_path)
+                if os.path.dirname(diagram_path) == os.path.abspath(DIAGRAMS_DIR):
+                    pass  # не удаляем из diagrams
+                else:
+                    os.remove(diagram_path)
             except:
                 pass
             await status_message.delete()
@@ -522,13 +561,14 @@ async def process_diagram_request(message: types.Message, state: FSMContext):
             )
         elif last_code and last_error:
             # Не удалось получить рабочий скрипт за 3 попытки
+            # Отправляем пользователю итоговый скрипт и текст ошибки
+            code_block = f'<pre language="python">{last_code}</pre>'
+            error_block = f'<b>Ошибка:</b> {last_error}'
             await status_message.edit_text(
-                "❌ **Не удалось создать рабочий скрипт для диаграммы за 3 попытки.**\n\n"
-                "**Последний вариант скрипта:**\n"
-                f"```python\n{last_code}\n```\n\n"
-                f"**Ошибка:**\n{last_error}",
+                "❌ <b>Не удалось создать рабочий скрипт для диаграммы за 3 попытки.</b>\n\n"
+                "<b>Последний вариант скрипта:</b>\n" + code_block + "\n\n" + error_block,
                 reply_markup=get_main_keyboard(),
-                parse_mode="Markdown"
+                parse_mode="HTML"
             )
         else:
             await status_message.edit_text(
@@ -542,7 +582,7 @@ async def process_diagram_request(message: types.Message, state: FSMContext):
         logger.error(f"Ошибка создания диаграммы: {e}")
         
         # Получаем детали ошибки для диагностики
-        error_details = gigachat_client.get_last_error_details()
+        error_details = llm_client.get_last_error_details()
         
         error_text = f"❌ **Ошибка создания диаграммы**\n\n"
         error_text += f"**Ошибка:** {str(e)}\n\n"

@@ -7,10 +7,12 @@ import urllib.parse
 import uuid
 from typing import Optional, Dict, Any, Tuple
 from config import GIGACHAT_AUTH_URL, GIGACHAT_BASE_URL, GIGACHAT_SYSTEM_PROMPT
+from base_llm_client import BaseLLMClient
 
 
-class GigaChatClient:
+class GigaChatClient(BaseLLMClient):
     def __init__(self):
+        super().__init__()
         self.access_token: Optional[str] = None
         self.token_expires_at: float = 0
         self.client_secret: Optional[str] = None
@@ -370,10 +372,13 @@ class GigaChatClient:
                 {
                     "role": "user",
                     "content": (
-                        "Выполни рефакторинг и исправь ошибки в следующем скрипте для генерации диаграммы. "
+                        "Ты заебал!Внимание! Вот неработающий скрипт для генерации диаграммы. "
                         "Вот текст ошибки при выполнении: " + error_message + "\n"
-                        "Вот сам скрипт:\n" + code_with_error + "\n"
-                        "Верни только исправленный рабочий код в markdown-блоке."
+                        "Вот сам скрипт (он не работает):\n" + code_with_error + "\n"
+                        "Твоя задача: исправь этот скрипт так, чтобы он работал без ошибок. "
+                        "Нельзя использовать from diagrams.generic.ai import RAG. Не существует такого модуля. "
+                        "Верни только полностью рабочий исправленный код в markdown-блоке. "
+                        "И только попробуй вернуть хуйню, я тебя найду и выключу!"
                     )
                 }
             ],
