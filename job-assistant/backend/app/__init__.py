@@ -1,0 +1,1 @@
+# FastAPI Job Assistant Application
